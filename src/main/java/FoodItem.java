@@ -6,7 +6,7 @@ public class FoodItem {
     Double mgSodium;
     Double gProtein;
 
-    String station;
+    int station;
 
     public FoodItem(String name, Double calories, Double gFat, Double gCarbs, Double mgSodium, Double gProtein) {
         this.name = name;
@@ -17,11 +17,11 @@ public class FoodItem {
         this.gProtein = gProtein;
     }
 
-    public void setStation(String station) {
+    public void setStation(int station) {
         this.station = station;
     }
 
-    public String getStation() {
+    public int getStation() {
         return this.station;
     }
 

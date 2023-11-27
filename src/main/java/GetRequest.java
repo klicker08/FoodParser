@@ -4,7 +4,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Set;
 
 import org.json.*;
 
@@ -15,18 +15,32 @@ public class GetRequest {
     String day;
     //Either breakfast, lunch, or dinner
     String meal;
-    ArrayList<FoodItem> menuItems;
 
-    public GetRequest(String year, String month, String day, String meal) {
+    /**
+     * Valid locations:
+     * four-lakes-market
+     * carsons-market
+     * lizs-market
+     * gordon-avenue-market
+     * rhetas-market
+     * lowell-market
+     */
+    String location;
+    ArrayList<FoodItem> menuItems;
+    ArrayList<Station> stations;
+
+    public GetRequest(String year, String month, String day, String meal, String location) {
         this.year = year;
         this.month = month;
         this.day = day;
         this.meal = meal;
+        this.location = location;
 
         HttpResponse<String> response = makeRequest();
 
         if (response.statusCode() == 200) {
             menuItems = parseMenu(response);
+            assignStations();
         } else {
             throw new RuntimeException("Network Error");
         }
@@ -35,8 +49,8 @@ public class GetRequest {
     private HttpResponse<String> makeRequest() {
         String date = this.year + "/" + this.month + "/" + this.day;
 
-        String requestURI = "https://wisc-housingdining.api.nutrislice.com/menu/api/weeks/school/gordon-avenue-market/menu-type/"
-                + this.meal + "/" + date + "/";
+        String requestURI = "https://wisc-housingdining.api.nutrislice.com/menu/api/weeks/school/"
+                + this.location + "/menu-type/" + this.meal + "/" + date + "/";
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(requestURI))
@@ -55,11 +69,13 @@ public class GetRequest {
         String date = this.year + "-" + this.month + "-" + this.day;
 
         JSONObject JSON = new JSONObject(response.body());
-        JSONArray daysArray = new JSONArray(JSON.getJSONArray("days"));
+        JSONArray daysArray = JSON.getJSONArray("days");
 
         JSONObject day = getCorrectDay(date, daysArray);
-        JSONArray menuItems = new JSONArray(day.getJSONArray("menu_items"));
+        JSONObject menu_info = day.getJSONObject("menu_info");
+        JSONArray menuItems = day.getJSONArray("menu_items");
 
+        this.stations = parseStations(menu_info);
         ArrayList<FoodItem> foodItems= parseMenuItems(menuItems);
 
         return foodItems;
@@ -93,47 +109,53 @@ public class GetRequest {
 
                 FoodItem item = new FoodItem(foodItem.getString("name"), calories, gFat, gCarbs, mgSodium, gProtein);
 
+                item.setStation(menuItems.getJSONObject(i).getInt("menu_id"));
+
                 foundFood.add(item);
             }
         }
         return foundFood;
     }
 
+    private ArrayList<Station> parseStations(JSONObject menu_info) {
+        Set<String> ids = menu_info.keySet();
+        ArrayList<Station> stationsList = new ArrayList<Station>();
+
+        for (String id : ids) {
+            if (menu_info.get(id) instanceof JSONObject) {
+                JSONObject tempStation = menu_info.getJSONObject(id);
+                JSONObject section_options = tempStation.getJSONObject("section_options");
+                String name = section_options.getString("display_name");
+                int id_temp = Integer.parseInt(id);
+
+                Station testStation = new Station(name, id_temp);
+                stationsList.add(testStation);
+            }
+
+        }
+
+        return stationsList;
+    }
+
+    private void assignStations() {
+        for (FoodItem item : this.menuItems) {
+            int id = item.getStation();
+
+            for (Station station : this.stations) {
+                if (station.getId() == id) {
+                    station.addItem(item);
+                }
+            }
+        }
+    }
+
     public ArrayList<FoodItem> getMenuItems() {
         return this.menuItems;
     }
 
-
-    public static void main(String[] args) {
-
-        GetRequest request = new GetRequest("2023", "11", "21", "lunch");
-        ArrayList<FoodItem> temp = request.getMenuItems();
-        for (int i = 0; i < temp.size(); i++) {
-            System.out.println(Arrays.toString(temp.get(i).getNutrition()));
-        }
-
-
-
-        /**
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://wisc-housingdining.api.nutrislice.com/menu/api/weeks/school/gordon-avenue-market/menu-type/lunch/2023/11/05/"))
-                .build();
-
-        try {
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == 200) {
-               JSONObject json = new JSONObject(response.body());
-               JSONArray days = new JSONArray(json.getJSONArray("days"));
-               JSONObject dayZero = days.getJSONObject(0);
-               JSONArray menuItems = new JSONArray(dayZero.getJSONArray("menu_items"));
-
-               System.out.println(menuItems.getJSONObject(0).get("text"));
-            }
-        } catch(Exception e){
-            e.printStackTrace();
-        }
-        */
+    public ArrayList<Station> getStations() {
+        return stations;
     }
+
+
 }
